@@ -1,0 +1,151 @@
+Here is a simple Java class structure that meets your requirements. It explicitly decouples the concept from any geometrical circle or distance calculation.
+
+It uses a `records` for immutable data structures and a `List` to strictly manage the 100 associated objects, copying the center's key automatically upon creation.
+
+```java
+package com.example.simple;
+
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
+import java.util.Objects;
+
+/**
+ * A simple data collection class.
+ * It holds one CenterAnchor and manages exactly 100 DataNodes.
+ * The key from the center anchor is copied to every DataNode upon creation.
+ * This class has no geometric properties or distance calculations.
+ */
+public class SimpleKeyedCollection {
+
+    // 1. The single center object
+    private final CenterAnchor center;
+    // 2. The list containing exactly 100 data nodes
+    private final List<DataNode> nodes;
+
+    public static final int NODE_CAPACITY = 100;
+
+    /**
+     * Constructs the collection.
+     *
+     * @param center The central anchor object. Must not be null.
+     * @throws IllegalArgumentException if the provided list of nodes is not size 100.
+     */
+    public SimpleKeyedCollection(CenterAnchor center, List<DataNode> nodes) {
+        this.center = Objects.requireNonNull(center, "Center anchor cannot be null.");
+        
+        Objects.requireNonNull(nodes, "Nodes list cannot be null.");
+        if (nodes.size() != NODE_CAPACITY) {
+            throw new IllegalArgumentException("Collection requires exactly " + NODE_CAPACITY + " data nodes.");
+        }
+        
+        // We create a new list to ensure it is unmodifiable externally,
+        // and we validate that all nodes copied the correct key during their own creation.
+        validateKeys(center.key(), nodes);
+        this.nodes = new ArrayList<>(nodes);
+    }
+
+    /**
+     * Helper factory method to build the collection cleanly.
+     * This handles the key copying logic during node creation.
+     */
+    public static SimpleKeyedCollection create(CenterAnchor center, List<String> nodePayloads) {
+        if (nodePayloads.size() != NODE_CAPACITY) {
+             throw new IllegalArgumentException("Payload list must contain " + NODE_CAPACITY + " items.");
+        }
+
+        List<DataNode> createdNodes = new ArrayList<>(NODE_CAPACITY);
+        for (String payload : nodePayloads) {
+            // The key is copied from the center object directly into the new DataNode
+            createdNodes.add(new DataNode(payload, center.key()));
+        }
+        
+        return new SimpleKeyedCollection(center, createdNodes);
+    }
+
+    private void validateKeys(String centerKey, List<DataNode> nodes) {
+        for (DataNode node : nodes) {
+            if (!node.parentKey().equals(centerKey)) {
+                throw new IllegalStateException("DataNode key mismatch. Node key: " + 
+                    node.parentKey() + ", Expected (Center Key): " + centerKey);
+            }
+        }
+    }
+
+    public CenterAnchor center() {
+        return center;
+    }
+
+    public List<DataNode> nodes() {
+        // Return an unmodifiable view to protect the internal list
+        return Collections.unmodifiableList(nodes);
+    }
+
+    // =====================================================
+    // Helper Data Classes (Defined as Records for simplicity)
+    // =====================================================
+
+    /**
+     * The central object defined by a key and some arbitrary data.
+     */
+    public record CenterAnchor(String key, String data) {
+        public CenterAnchor {
+            Objects.requireNonNull(key, "Key cannot be null.");
+            Objects.requireNonNull(data, "Data cannot be null.");
+        }
+    }
+
+    /**
+     * A data object that contains a payload AND a String variable
+     * that holds a reference copy of the parent key.
+     */
+    public record DataNode(String payload, String parentKey) {
+        public DataNode {
+            Objects.requireNonNull(payload, "Payload cannot be null.");
+            Objects.requireNonNull(parentKey, "Parent key reference cannot be null.");
+        }
+    }
+}
+
+```
+
+### Example Usage
+
+```java
+package com.example.simple;
+
+import java.util.ArrayList;
+import java.util.List;
+
+public class SimpleCollectionDemo {
+    public static void main(String[] args) {
+        // 1. Create the Center Object
+        var myCenter = new SimpleKeyedCollection.CenterAnchor("MASTER-KEY-12345", "Core Hub Data");
+
+        // 2. Prepare 100 payloads (e.g., names or sensor IDs)
+        List<String> payloads = new ArrayList<>();
+        for (int i = 0; i < 100; i++) {
+            payloads.add("Node-Payload-" + i);
+        }
+
+        // 3. Create the collection using the factory method.
+        // This automatically copies "MASTER-KEY-12345" into all 100 DataNodes.
+        var myCollection = SimpleKeyedCollection.create(myCenter, payloads);
+
+        // 4. Verify results
+        System.out.println("Collection created for center key: " + myCollection.center().key());
+        System.out.println("Number of nodes stored: " + myCollection.nodes().size());
+
+        // Inspect the first node to verify the key copy
+        var firstNode = myCollection.nodes().get(0);
+        System.out.println("First node payload: " + firstNode.payload());
+        System.out.println("First node copied parentKey: " + firstNode.parentKey());
+
+        // Verify the keys match
+        if (firstNode.parentKey().equals(myCollection.center().key())) {
+            System.out.println("SUCCESS: Center key was correctly copied to the DataNode.");
+        }
+    }
+}
+
+```
